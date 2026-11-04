@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.productivity.ui.theme.PomodoroFocusRed
 
 sealed class Screen(
     val route: String,
@@ -19,8 +20,9 @@ sealed class Screen(
         route = "pomodoro",
         title = "Pomodoro",
         icon = Icons.Filled.PlayArrow,
-        lightColor = Color(0xFFFFEBEE), // Warm red tint
-        darkColor = Color(0xFF3B1E1E),
+        // Unused while the screen is shown: MainActivity follows the selected PomodoroMode.
+        lightColor = PomodoroFocusRed,
+        darkColor = PomodoroFocusRed,
     )
 
     object TaskList : Screen(
