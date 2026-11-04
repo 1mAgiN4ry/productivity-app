@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -108,7 +109,10 @@ fun PomodoroScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .clipToBounds(),
-                contentAlignment = Alignment.Center,
+                // Sit above centre: of the free space, 20% goes above the dial and 80% below
+                // the button, leaving room for the task area and keeping proportions on any
+                // screen height.
+                contentAlignment = BiasAlignment(horizontalBias = 0f, verticalBias = -0.6f),
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
