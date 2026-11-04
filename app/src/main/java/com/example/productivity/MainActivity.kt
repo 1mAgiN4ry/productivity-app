@@ -160,7 +160,8 @@ fun MainAppScreen() {
                 PomodoroScreen(
                     state = pomodoro.state,
                     onModeChange = pomodoro::selectMode,
-                    onStartPause = pomodoro::toggle
+                    onStartPause = pomodoro::toggle,
+                    onReset = pomodoro::reset
                 )
             }
             composable(Screen.TaskList.route) {

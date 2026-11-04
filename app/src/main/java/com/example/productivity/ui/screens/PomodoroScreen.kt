@@ -1,7 +1,10 @@
 package com.example.productivity.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,6 +75,7 @@ fun PomodoroScreen(
     state: PomodoroState,
     onModeChange: (PomodoroMode) -> Unit,
     onStartPause: () -> Unit,
+    onReset: () -> Unit,
     modifier: Modifier = Modifier,
     onPickTask: () -> Unit = {},
 ) {
@@ -110,15 +115,24 @@ fun PomodoroScreen(
                     verticalArrangement = Arrangement.spacedBy(56.dp),
                 ) {
                     TimerDial(state = state)
-                    StartButton(
-                        label = when (state.status) {
-                            TimerStatus.Ready -> "Start"
-                            TimerStatus.Running -> "Pause"
-                            TimerStatus.Paused -> "Resume"
-                        },
-                        modeColor = modeColor,
-                        onClick = onStartPause,
-                    )
+                    Box(contentAlignment = Alignment.TopCenter) {
+                        StartButton(
+                            label = when (state.status) {
+                                TimerStatus.Ready -> "Start"
+                                TimerStatus.Running -> "Pause"
+                                TimerStatus.Paused -> "Resume"
+                            },
+                            modeColor = modeColor,
+                            onClick = onStartPause,
+                        )
+                        // Offset below the button rather than laid out after it, so showing it
+                        // doesn't shift the dial and button away from the design's positions.
+                        ResetLink(
+                            visible = state.status == TimerStatus.Paused,
+                            onClick = onReset,
+                            modifier = Modifier.offset(y = 72.dp + 12.dp),
+                        )
+                    }
                 }
             }
             TaskField(
@@ -347,6 +361,34 @@ private fun StartButton(label: String, modeColor: Color, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun ResetLink(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(),
+        exit = fadeOut(),
+    ) {
+        Box(
+            modifier = Modifier
+                .height(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Reset",
+                style = TextStyle(
+                    fontFamily = DmSans,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                ),
+            )
+        }
+    }
+}
+
 private val TaskTextStyle = TextStyle(
     fontFamily = DmSans,
     fontWeight = FontWeight.Medium,
@@ -446,6 +488,6 @@ private fun strokeIcon(name: String, pathData: String, strokeWidth: Float): Imag
 @Composable
 private fun PomodoroScreenPreview() {
     Box(Modifier.background(PomodoroMode.Focus.color)) {
-        PomodoroScreen(state = PomodoroState(), onModeChange = {}, onStartPause = {})
+        PomodoroScreen(state = PomodoroState(), onModeChange = {}, onStartPause = {}, onReset = {})
     }
 }

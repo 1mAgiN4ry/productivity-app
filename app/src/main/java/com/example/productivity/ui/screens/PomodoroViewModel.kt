@@ -29,6 +29,12 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         state = PomodoroState(mode = mode, session = state.session)
     }
 
+    /** Back to a full, stopped timer for the current mode and session. */
+    fun reset() {
+        ticker?.cancel()
+        state = PomodoroState(mode = state.mode, session = state.session)
+    }
+
     fun toggle() {
         when (state.status) {
             TimerStatus.Ready, TimerStatus.Paused -> start()
