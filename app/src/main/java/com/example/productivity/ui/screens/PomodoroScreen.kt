@@ -428,7 +428,7 @@ private fun TaskField(
                             Text(
                                 text = "Add or pick a task",
                                 style = TaskTextStyle,
-                                color = PomodoroInk.copy(alpha = 0.85f),
+                                color = PomodoroInk,
                             )
                         }
                         innerTextField()
@@ -452,7 +452,7 @@ private fun TaskField(
             Modifier
                 .fillMaxWidth()
                 .height(2.dp)
-                .background(PomodoroInk.copy(alpha = 0.45f))
+                .background(PomodoroInk.copy(alpha = 0.7f))
         )
     }
 }

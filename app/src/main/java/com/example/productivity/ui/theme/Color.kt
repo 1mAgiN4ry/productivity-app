@@ -10,8 +10,9 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// Pomodoro screen (from the "Timer ready" design reference)
-val PomodoroInk = Color(0xFFFAF3DB)
-val PomodoroFocusRed = Color(0xFFC8231C)
-val PomodoroShortBreakGreen = Color(0xFF1B7A4B)
-val PomodoroLongBreakBlue = Color(0xFF2352B5)
+// Pomodoro screen: layout from the "Timer ready" design reference, colours from Gruvbox.
+// Contrast of the ink against each background (WCAG): red 4.8:1, green 4.3:1, blue 5.7:1.
+val PomodoroInk = Color(0xFFFBF1C7)             // light0
+val PomodoroFocusRed = Color(0xFFCC241D)        // neutral red
+val PomodoroShortBreakGreen = Color(0xFF79740E) // faded green
+val PomodoroLongBreakBlue = Color(0xFF076678)   // faded blue
