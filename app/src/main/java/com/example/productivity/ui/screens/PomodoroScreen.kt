@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,7 +54,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.example.productivity.ui.theme.DmMono
 import com.example.productivity.ui.theme.DmSans
 import com.example.productivity.ui.theme.PomodoroInk
@@ -96,8 +97,6 @@ fun PomodoroScreen(
                 mode = mode,
                 modeColor = modeColor,
                 onModeChange = onModeChange,
-                // Draw the expanded list above the dial.
-                modifier = Modifier.zIndex(1f),
             )
             Box(
                 modifier = Modifier
@@ -145,52 +144,73 @@ private fun ModePicker(
     modifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val shape = RoundedCornerShape(24.dp)
 
-    // Reserves the closed height (48dp); the open list overflows downwards over the dial.
     Box(modifier.size(width = 220.dp, height = 48.dp)) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(align = Alignment.Top, unbounded = true)
-                .clip(shape)
-                .background(modeColor)
-                .border(2.dp, PomodoroInk, shape)
-                .padding(2.dp)
-        ) {
-            if (!expanded) {
-                PickerRow(
-                    modifier = Modifier.clickable(
-                        role = Role.DropdownList,
-                        onClickLabel = "Change timer mode",
-                    ) { expanded = true },
-                ) {
-                    Text(mode.label, style = PickerTextStyle)
-                    Icon(
-                        imageVector = ChevronDownIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            } else {
-                PomodoroMode.entries.forEach { option ->
-                    val selected = option == mode
-                    PickerRow(
-                        modifier = Modifier.selectable(
-                            selected = selected,
-                            role = Role.Tab,
+        PickerSurface(modeColor) {
+            PickerRow(
+                modifier = Modifier.clickable(
+                    role = Role.DropdownList,
+                    onClickLabel = "Change timer mode",
+                ) { expanded = true },
+            ) {
+                Text(mode.label, style = PickerTextStyle)
+                Icon(
+                    imageVector = ChevronDownIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
+        // The open list is a popup laid exactly over the closed pill, so it draws above the
+        // dial and closes on any tap outside it (including the navbar) or on Back.
+        if (expanded) {
+            Popup(
+                alignment = Alignment.TopStart,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                PickerSurface(modeColor, Modifier.width(220.dp)) {
+                    PomodoroMode.entries.forEach { option ->
+                        val selected = option == mode
+                        PickerRow(
+                            modifier = Modifier.selectable(
+                                selected = selected,
+                                role = Role.Tab,
+                            ) {
+                                onModeChange(option)
+                                expanded = false
+                            },
+                            background = if (selected) PomodoroInk else Color.Transparent,
+                            contentColor = if (selected) modeColor else PomodoroInk,
                         ) {
-                            onModeChange(option)
-                            expanded = false
-                        },
-                        background = if (selected) PomodoroInk else Color.Transparent,
-                        contentColor = if (selected) modeColor else PomodoroInk,
-                    ) {
-                        Text(option.label, style = PickerTextStyle)
+                            Text(option.label, style = PickerTextStyle)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** The picker's outlined pill; used for both the closed button and the open list. */
+@Composable
+private fun PickerSurface(
+    modeColor: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(24.dp)
+    CompositionLocalProvider(LocalContentColor provides PomodoroInk) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(modeColor)
+                .border(2.dp, PomodoroInk, shape)
+                .padding(2.dp),
+            content = content,
+        )
     }
 }
 

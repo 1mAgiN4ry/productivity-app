@@ -22,8 +22,9 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
     /** Deadline on the monotonic clock, so the countdown can't drift or be skewed by clock changes. */
     private var endsAt = 0L
 
-    /** Switching mode (including re-picking the current one) resets the timer. */
+    /** Switching to a different mode resets the timer; re-picking the current one does nothing. */
     fun selectMode(mode: PomodoroMode) {
+        if (mode == state.mode) return
         ticker?.cancel()
         state = PomodoroState(mode = mode, session = state.session)
     }
