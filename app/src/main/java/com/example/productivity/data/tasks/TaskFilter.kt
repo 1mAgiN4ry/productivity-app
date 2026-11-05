@@ -1,0 +1,97 @@
+package com.example.productivity.data.tasks
+
+import java.time.LocalDate
+
+enum class Grouping { All, Ungrouped, Grouped }
+
+/** The filter sheet's "State" chips. [Blocked] is derived rather than a stored state. */
+enum class StateFilter { Open, Waiting, Blocked, Done, Dropped }
+
+enum class DateFilter {
+    Overdue,
+    DueToday,
+
+    /** Shown as "Due in the next 7 days": today plus the following six days. */
+    DueWithin7Days,
+    HasStartDate,
+    NoDate,
+}
+
+enum class SortOrder {
+    /** Soonest due first; undated last. */
+    DueDate,
+
+    /** Newest first. */
+    Created,
+
+    /** Alphabetical by group, ungrouped last; due date within a group. */
+    Group;
+
+    fun comparator(groupsById: Map<Long, GroupEntity>): Comparator<TaskStatus> {
+        val byDue = compareBy<TaskStatus, LocalDate?>(nullsLast()) { it.task.dueDate }
+            .thenBy { it.task.createdAt }
+            .thenBy { it.task.id }
+        return when (this) {
+            DueDate -> byDue
+            Created -> compareByDescending<TaskStatus> { it.task.createdAt }.thenByDescending { it.task.id }
+            Group -> compareBy<TaskStatus, String?>(nullsLast(String.CASE_INSENSITIVE_ORDER)) {
+                it.task.groupId?.let { id -> groupsById[id]?.title }
+            }.thenBy { it.task.groupId ?: Long.MAX_VALUE }.then(byDue)
+        }
+    }
+}
+
+/**
+ * What the task list shows. Within a set of chips any one may match (OR); across sections all
+ * must match (AND). An empty chip set doesn't restrict anything.
+ */
+data class TaskFilter(
+    /** Defaults to [Grouping.Ungrouped]: the main list shows loose tasks plus a row per group. */
+    val grouping: Grouping = Grouping.Ungrouped,
+    val states: Set<StateFilter> = setOf(StateFilter.Open, StateFilter.Waiting),
+    val dates: Set<DateFilter> = emptySet(),
+    val sort: SortOrder = SortOrder.DueDate,
+    /** The eye toggle: include blocked and upcoming tasks. */
+    val showHidden: Boolean = false,
+    /** Restrict to one group (the group view). Overrides [grouping]. */
+    val groupId: Long? = null,
+) {
+    fun matches(status: TaskStatus, today: LocalDate): Boolean {
+        val task = status.task
+
+        val inScope = when {
+            groupId != null -> task.groupId == groupId
+            grouping == Grouping.Ungrouped -> task.groupId == null
+            grouping == Grouping.Grouped -> task.groupId != null
+            else -> true
+        }
+        if (!inScope) return false
+
+        // Picking the "Blocked" chip is itself a request to see blocked tasks.
+        val explicitlyBlocked = StateFilter.Blocked in states && status.isBlocked
+        if (status.isHidden && !showHidden && !explicitlyBlocked) return false
+
+        val stateMatches = states.isEmpty() || states.any {
+            when (it) {
+                StateFilter.Open -> task.state == TaskState.Open
+                StateFilter.Waiting -> task.state == TaskState.Waiting
+                StateFilter.Blocked -> status.isBlocked
+                StateFilter.Done -> task.state == TaskState.Done
+                StateFilter.Dropped -> task.state == TaskState.Dropped
+            }
+        }
+        if (!stateMatches) return false
+
+        return dates.isEmpty() || dates.any {
+            when (it) {
+                DateFilter.Overdue ->
+                    task.state.isActive && task.dueDate != null && task.dueDate.isBefore(today)
+                DateFilter.DueToday -> task.dueDate == today
+                DateFilter.DueWithin7Days ->
+                    task.dueDate != null && !task.dueDate.isBefore(today) && task.dueDate.isBefore(today.plusDays(7))
+                DateFilter.HasStartDate -> task.startDate != null
+                DateFilter.NoDate -> task.startDate == null && task.dueDate == null
+            }
+        }
+    }
+}
