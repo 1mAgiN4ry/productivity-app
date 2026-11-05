@@ -30,7 +30,7 @@ fun NavGraphBuilder.taskGraph(nav: NavController) {
     navigation(startDestination = TaskRoutes.ALL, route = TaskRoutes.GRAPH) {
         composable(TaskRoutes.ALL) {
             val c = container()
-            val vm = viewModel { TaskListViewModel(c.taskRepository, c.taskUndo, c.appScope, groupId = null) }
+            val vm = viewModel { TaskListViewModel(c.taskRepository, c.taskUndo, c.appScope, groupId = null, c.taskFilter) }
             GruvboxTheme {
                 AllTasksScreen(
                     vm = vm,

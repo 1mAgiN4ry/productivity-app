@@ -31,6 +31,7 @@ object TaskIcons {
         "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
         "M16 3v4M8 3v4M3 10h18",
     )
+    val Filter = strokeIcon("Filter", 2.2f, "M4 6h16M7 12h10M10 18h4")
     val More = strokeIcon("More", 3f, "M12 5h.01M12 12h.01M12 19h.01")
     val Check = strokeIcon("Check", 2.4f, "M5 12.5l4.5 4.5L19 7.5")
 }

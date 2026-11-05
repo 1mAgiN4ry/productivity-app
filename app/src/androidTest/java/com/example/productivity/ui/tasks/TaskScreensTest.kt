@@ -2,6 +2,7 @@ package com.example.productivity.ui.tasks
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isPopup
@@ -17,7 +18,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.productivity.data.AppDatabase
+import com.example.productivity.data.tasks.DateFilter
 import com.example.productivity.data.tasks.DependencyTarget
+import com.example.productivity.data.tasks.TaskFilter
+import com.example.productivity.data.tasks.TaskFilterStore
 import com.example.productivity.data.tasks.TaskRepository
 import com.example.productivity.data.tasks.TaskState
 import com.example.productivity.ui.theme.GruvboxTheme
@@ -60,8 +64,12 @@ class TaskScreensTest {
     @get:Rule(order = 1)
     val compose = createComposeRule()
 
-    private fun showAllTasks(onOpenTask: (Long) -> Unit = {}, onOpenGroup: (Long) -> Unit = {}) {
-        val vm = TaskListViewModel(repo, undo, writes, groupId = null)
+    private fun showAllTasks(
+        onOpenTask: (Long) -> Unit = {},
+        onOpenGroup: (Long) -> Unit = {},
+        filters: TaskFilterStore = TaskFilterStore(null),
+    ) {
+        val vm = TaskListViewModel(repo, undo, writes, groupId = null, filters)
         compose.setContent { GruvboxTheme { AllTasksScreen(vm, onOpenTask, onOpenGroup) } }
     }
 
@@ -136,6 +144,59 @@ class TaskScreensTest {
         compose.onNodeWithText("Post the old desk").assertDoesNotExist()
         compose.onNodeWithContentDescription("Show blocked and upcoming tasks").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Blocked by Return parcel"), timeoutMillis = 5_000)
+    }
+
+    @Test
+    fun theFilterCanShowDoneTasksAndClearAllResetsIt() {
+        runBlocking {
+            repo.createTask("Pay rent")
+            val plants = repo.createTask("Water the plants")
+            repo.setState(plants, TaskState.Done)
+        }
+        showAllTasks()
+        compose.waitUntilAtLeastOneExists(hasText("Pay rent"), timeoutMillis = 5_000)
+        compose.onNodeWithText("Water the plants").assertDoesNotExist()
+
+        compose.onNodeWithText("Filter").performClick()
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText("Show 2 tasks").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Water the plants"), timeoutMillis = 5_000)
+
+        compose.onNodeWithText("Filter").performClick()
+        compose.onNodeWithText("Clear all").performClick()
+        compose.onNodeWithText("Show 1 task").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Water the plants").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun theGroupedListLabelsTasksWithTheirGroup() {
+        runBlocking {
+            val uni = repo.createGroup("Uni")
+            repo.createTask("Write the essay", groupId = uni)
+            repo.createTask("Pay rent")
+        }
+        showAllTasks()
+        compose.waitUntilAtLeastOneExists(hasText("Pay rent"), timeoutMillis = 5_000)
+
+        compose.onNodeWithText("Filter").performClick()
+        compose.onNodeWithText("Grouped").performClick()
+        compose.onNodeWithText("Show 1 task").performClick()
+
+        compose.waitUntilAtLeastOneExists(hasText("Write the essay"), timeoutMillis = 5_000)
+        compose.onNodeWithText("Pay rent").assertDoesNotExist()
+        // One "Uni": the task's label. The group's own row isn't shown in a flat list.
+        compose.onAllNodesWithText("Uni").assertCountEquals(1)
+    }
+
+    @Test
+    fun aFilterThatMatchesNothingOffersToClearIt() {
+        runBlocking { repo.createTask("Pay rent") }
+        val filters = TaskFilterStore(null).apply { set(TaskFilter(dates = setOf(DateFilter.Overdue))) }
+        showAllTasks(filters = filters)
+
+        compose.waitUntilAtLeastOneExists(hasText("No tasks match this filter."), timeoutMillis = 5_000)
+        compose.onNodeWithText("Clear filter").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Pay rent"), timeoutMillis = 5_000)
     }
 
     @Test

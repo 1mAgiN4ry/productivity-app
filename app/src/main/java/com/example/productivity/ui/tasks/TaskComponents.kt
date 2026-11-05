@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -113,9 +115,11 @@ internal fun Modifier.dashedBorder(color: Color, width: Dp = 2.dp, radius: Dp = 
 
 // Rows
 
+/** [groupName] is shown in the flat lists, where tasks from different groups sit together. */
 @Composable
-internal fun TaskRow(status: TaskStatus, today: LocalDate, onClick: () -> Unit) {
+internal fun TaskRow(status: TaskStatus, today: LocalDate, groupName: String? = null, onClick: () -> Unit) {
     val task = status.task
+    val finished = !task.state.isActive
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -126,17 +130,41 @@ internal fun TaskRow(status: TaskStatus, today: LocalDate, onClick: () -> Unit) 
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(8.dp).background(GruvFg0, CircleShape))
+            when (task.state) {
+                TaskState.Done -> Icon(TaskIcons.Check, contentDescription = "Done", tint = GruvFg4, modifier = Modifier.size(18.dp))
+                TaskState.Dropped -> Box(Modifier.size(8.dp).border(1.5.dp, GruvFg4, CircleShape))
+                else -> Box(Modifier.size(8.dp).background(GruvFg0, CircleShape))
+            }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(task.title, style = dmSans(16, FontWeight.Medium, lineHeight = 22))
+            Text(
+                text = task.title,
+                style = if (finished) {
+                    dmSans(16, FontWeight.Medium, GruvFg4, lineHeight = 22).copy(textDecoration = TextDecoration.LineThrough)
+                } else {
+                    dmSans(16, FontWeight.Medium, lineHeight = 22)
+                },
+            )
             val waiting = task.waitingNote?.takeIf { task.state == TaskState.Waiting }
-            if (task.dueDate != null || waiting != null) {
+            if (task.dueDate != null || waiting != null || groupName != null || task.state == TaskState.Dropped) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    task.dueDate?.let { Text(TaskFormat.date(it, today), style = dmMono(13, GruvYellow)) }
+                    if (task.state == TaskState.Dropped) Text("Dropped", style = dmSans(13, color = GruvFg4))
+                    task.dueDate?.let {
+                        Text(TaskFormat.date(it, today), style = dmMono(13, if (finished) GruvFg4 else GruvYellow))
+                    }
+                    groupName?.let {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f, fill = false),
+                        ) {
+                            Icon(TaskIcons.Layers, contentDescription = "Group", tint = GruvFg3, modifier = Modifier.size(13.dp))
+                            Text(it, style = dmSans(13, color = GruvFg3), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                     waiting?.let {
                         Text(
                             text = "Waiting · $it",
@@ -275,6 +303,55 @@ internal fun PlainIconButton(icon: ImageVector, description: String, onClick: ()
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(iconSize))
+    }
+}
+
+/** The outlined pill with an icon (the header's "Filter"); filled when [active]. */
+@Composable
+internal fun PillButton(text: String, icon: ImageVector, active: Boolean, activeDescription: String, onClick: () -> Unit) {
+    val content = if (active) GruvBg0 else GruvFg0
+    Row(
+        modifier = Modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(if (active) GruvFg0 else Color.Transparent)
+            .border(2.dp, GruvFg0, RoundedCornerShape(22.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { if (active) stateDescription = activeDescription }
+            .padding(start = 14.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+        Text(text, style = dmSans(14, FontWeight.Bold, content))
+    }
+}
+
+/** Multi-select pills (the filter sheet's State and Dates). They wrap onto more lines as needed. */
+@OptIn(ExperimentalLayoutApi::class) // FlowRow, stable from Compose 1.8
+@Composable
+internal fun <T> ToggleChips(options: List<T>, selected: Set<T>, label: (T) -> String, onToggle: (T) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            val on = option in selected
+            Row(
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (on) GruvFg0 else Color.Transparent)
+                    .border(2.dp, GruvFg0, RoundedCornerShape(18.dp))
+                    .toggleable(value = on, role = Role.Checkbox, onValueChange = { onToggle(option) })
+                    .padding(start = if (on) 10.dp else 14.dp, end = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (on) Icon(TaskIcons.Check, contentDescription = null, tint = GruvBg0, modifier = Modifier.size(14.dp))
+                Text(label(option), style = dmSans(14, FontWeight.Bold, if (on) GruvBg0 else GruvFg0))
+            }
+        }
     }
 }
 

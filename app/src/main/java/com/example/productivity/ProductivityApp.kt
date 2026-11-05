@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import com.example.productivity.data.AppDatabase
 import com.example.productivity.data.tasks.SampleData
+import com.example.productivity.data.tasks.TaskFilterStore
 import com.example.productivity.data.tasks.TaskRepository
 import com.example.productivity.ui.tasks.TaskUndo
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,7 @@ class AppContainer(context: Context) {
     val database: AppDatabase = AppDatabase.create(context)
     val taskRepository = TaskRepository(database)
     val taskUndo = TaskUndo()
+    val taskFilter = TaskFilterStore(context.getSharedPreferences("tasks", Context.MODE_PRIVATE))
 
     /**
      * For writes that must finish even if the screen that started them closes (e.g. the last

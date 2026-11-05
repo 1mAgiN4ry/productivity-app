@@ -3,6 +3,7 @@ package com.example.productivity.ui.tasks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +26,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.productivity.data.tasks.Blocker
@@ -66,6 +69,7 @@ fun AllTasksScreen(
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var creating by rememberSaveable { mutableStateOf(false) }
+    var filtering by rememberSaveable { mutableStateOf(false) }
     UndoDeleteEffect(vm, snackbar)
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -77,6 +81,13 @@ fun AllTasksScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("Tasks", style = dmSans(28, FontWeight.Bold), modifier = Modifier.weight(1f))
+                PillButton(
+                    text = "Filter",
+                    icon = TaskIcons.Filter,
+                    active = state.filter.isCustomised,
+                    activeDescription = "Filter on",
+                    onClick = { filtering = true },
+                )
                 RoundIconToggle(
                     icon = TaskIcons.Eye,
                     description = "Show blocked and upcoming tasks",
@@ -86,9 +97,10 @@ fun AllTasksScreen(
             }
 
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                val nothingAtAll = state.tasks.isEmpty() && state.groups.isEmpty() &&
-                    state.hiddenBlocked + state.hiddenUpcoming == 0
-                if (!state.loading && nothingAtAll) {
+                val listEmpty = state.tasks.isEmpty() && state.groups.isEmpty()
+                if (!state.loading && listEmpty && state.filter.isCustomised) {
+                    item { NoMatchMessage(onClear = vm::clearFilter) }
+                } else if (!state.loading && listEmpty && state.hiddenBlocked + state.hiddenUpcoming == 0) {
                     item { EmptyMessage("Nothing here yet. Tap New to add a task or a group.") }
                 }
                 items(state.tasks, key = { "task-${it.task.id}" }) { status ->
@@ -99,7 +111,8 @@ fun AllTasksScreen(
                             onBlockerClick = { openBlocker(status, onOpenTask, onOpenGroup) },
                         )
                     } else {
-                        TaskRow(status, state.today) { onOpenTask(status.task.id) }
+                        val groupName = status.task.groupId?.let(state.groupLabels::get)
+                        TaskRow(status, state.today, groupName) { onOpenTask(status.task.id) }
                     }
                 }
                 items(state.groups, key = { "group-${it.group.id}" }) { summary ->
@@ -120,6 +133,14 @@ fun AllTasksScreen(
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp)) { TaskSnackbar(it) }
     }
 
+    if (filtering) {
+        FilterSheet(
+            current = state.filter,
+            preview = vm::previewFor,
+            onApply = vm::applyFilter,
+            onDismiss = { filtering = false },
+        )
+    }
     if (creating) {
         NewSheet(
             groups = state.allGroups,
@@ -249,5 +270,20 @@ fun GroupScreen(
             confirmLabel = "Dismantle",
             onConfirm = vm::dismantleGroup,
         ) { dismantling = false }
+    }
+}
+
+/** Shown when the filter leaves nothing to list. */
+@Composable
+private fun NoMatchMessage(onClear: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp)) {
+        Text("No tasks match this filter.", style = dmSans(15, color = GruvFg3, lineHeight = 22))
+        Text(
+            text = "Clear filter",
+            style = dmSans(15, FontWeight.Medium).copy(textDecoration = TextDecoration.Underline),
+            modifier = Modifier
+                .clickable(role = Role.Button, onClick = onClear)
+                .padding(vertical = 12.dp),
+        )
     }
 }

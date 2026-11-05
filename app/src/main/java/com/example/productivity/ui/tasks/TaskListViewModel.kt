@@ -10,6 +10,7 @@ import com.example.productivity.data.tasks.Grouping
 import com.example.productivity.data.tasks.InvalidDatesException
 import com.example.productivity.data.tasks.TaskEntity
 import com.example.productivity.data.tasks.TaskFilter
+import com.example.productivity.data.tasks.TaskFilterStore
 import com.example.productivity.data.tasks.TaskRepository
 import com.example.productivity.data.tasks.TaskState
 import com.example.productivity.data.tasks.TaskStatus
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -42,7 +44,14 @@ data class TaskListUiState(
     val allGroups: List<GroupEntity> = emptyList(),
     /** Group view only: open tasks elsewhere that could be added to this group. */
     val candidates: List<GroupCandidate> = emptyList(),
+    /** All view only: the filter sheet's choices. */
+    val filter: TaskFilter = TaskFilter(),
+    /** Group names by id, for labelling tasks in the flat (All / Grouped) lists. Empty otherwise. */
+    val groupLabels: Map<Long, String> = emptyMap(),
 )
+
+/** How many tasks, and group rows, a filter would list. */
+data class FilterPreview(val tasks: Int, val groups: Int)
 
 data class GroupCandidate(
     val taskId: Long,
@@ -57,24 +66,38 @@ class TaskListViewModel(
     private val undo: TaskUndo,
     private val writes: CoroutineScope,
     private val groupId: Long?,
+    /** The All view's saved filter. The group view always shows its open and waiting tasks. */
+    private val filters: TaskFilterStore = TaskFilterStore(null),
 ) : ViewModel() {
 
     private val showHidden = MutableStateFlow(false)
 
+    private val chosenFilter: Flow<TaskFilter> =
+        if (groupId == null) filters.filter else flowOf(TaskFilter(groupId = groupId))
+
+    // Kept for previewing a draft filter's count while the sheet is open.
+    private val latestGraph = repo.graph.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val latestToday = repo.today.stateIn(viewModelScope, SharingStarted.Eagerly, LocalDate.now())
+
     val state: StateFlow<TaskListUiState> =
-        combine(repo.graph, repo.today, showHidden) { graph, today, show ->
-            // Fetch with hidden tasks included, then decide what to show and what to count.
-            val all = graph.query(TaskFilter(grouping = Grouping.Ungrouped, groupId = groupId, showHidden = true), today)
-            val hidden = all.filter { it.isHidden }
+        combine(repo.graph, repo.today, showHidden, chosenFilter) { graph, today, show, filter ->
+            val shown = graph.query(filter.copy(showHidden = show), today)
+            // What the eye link counts: everything hidden while it's on; otherwise what it would add.
+            val shownIds = shown.mapTo(HashSet()) { it.task.id }
+            val hidden = graph.query(filter.copy(showHidden = true), today)
+                .filter { it.isHidden && (show || it.task.id !in shownIds) }
+            val flat = groupId == null && filter.grouping != Grouping.Ungrouped
             TaskListUiState(
                 loading = false,
                 today = today,
-                tasks = if (show) all else all.filterNot { it.isHidden },
-                groups = if (groupId == null) graph.groupSummaries() else emptyList(),
+                tasks = shown,
+                groups = if (groupId == null && !flat) graph.groupSummaries() else emptyList(),
                 group = groupId?.let(graph::group)?.let(graph::summaryOf),
                 showHidden = show,
                 hiddenBlocked = hidden.count { it.isBlocked },
                 hiddenUpcoming = hidden.count { !it.isBlocked },
+                filter = filter,
+                groupLabels = if (flat) graph.groups.associate { it.id to it.title } else emptyMap(),
                 allGroups = graph.groups.sortedBy { it.title.lowercase() },
                 candidates = if (groupId == null) emptyList() else graph.tasks
                     .filter { it.state.isActive && it.groupId != groupId }
@@ -94,6 +117,19 @@ class TaskListViewModel(
     val pendingUndo: StateFlow<DeletedTask?> = undo.pending
 
     fun toggleHidden() = showHidden.update { !it }
+
+    /** What [draft] would show right now, for the sheet's "Show N tasks" button. */
+    fun previewFor(draft: TaskFilter): FilterPreview {
+        val graph = latestGraph.value ?: return FilterPreview(0, 0)
+        val tasks = graph.query(draft.copy(showHidden = showHidden.value, groupId = groupId), latestToday.value).size
+        // The Ungrouped list also has a row per group.
+        val groups = if (groupId == null && draft.grouping == Grouping.Ungrouped) graph.groups.size else 0
+        return FilterPreview(tasks, groups)
+    }
+
+    fun applyFilter(filter: TaskFilter) = filters.set(filter)
+
+    fun clearFilter() = filters.set(TaskFilter())
 
     private val _messages = Channel<String>(Channel.BUFFERED)
 

@@ -56,6 +56,43 @@ data class TaskFilter(
     /** Restrict to one group (the group view). Overrides [grouping]. */
     val groupId: Long? = null,
 ) {
+    /** True if the sheet's choices differ from the defaults (ignores the eye and [groupId]). */
+    val isCustomised: Boolean
+        get() = copy(showHidden = false, groupId = null) != TaskFilter()
+
+    /**
+     * The sheet's choices as text, for saving, e.g. `grouping=Ungrouped;states=Open,Waiting;dates=;sort=DueDate`.
+     * The eye and [groupId] aren't included.
+     */
+    fun encode(): String = listOf(
+        "grouping=${grouping.name}",
+        "states=${states.sorted().joinToString(",") { it.name }}",
+        "dates=${dates.sorted().joinToString(",") { it.name }}",
+        "sort=${sort.name}",
+    ).joinToString(";")
+
+    companion object {
+        /** Reads [encode]'s text. Unknown or missing parts fall back to the defaults. */
+        fun decode(text: String?): TaskFilter {
+            val default = TaskFilter()
+            if (text.isNullOrBlank()) return default
+            val parts = text.split(";").mapNotNull {
+                val i = it.indexOf('=')
+                if (i < 0) null else it.substring(0, i) to it.substring(i + 1)
+            }.toMap()
+
+            fun names(key: String) = parts[key]?.split(",")?.filter { it.isNotEmpty() }
+            return TaskFilter(
+                grouping = parts["grouping"]?.let { v -> Grouping.entries.find { it.name == v } } ?: default.grouping,
+                states = names("states")?.mapNotNull { v -> StateFilter.entries.find { it.name == v } }?.toSet()
+                    ?: default.states,
+                dates = names("dates")?.mapNotNull { v -> DateFilter.entries.find { it.name == v } }?.toSet()
+                    ?: default.dates,
+                sort = parts["sort"]?.let { v -> SortOrder.entries.find { it.name == v } } ?: default.sort,
+            )
+        }
+    }
+
     fun matches(status: TaskStatus, today: LocalDate): Boolean {
         val task = status.task
 

@@ -1,6 +1,8 @@
 package com.example.productivity.data.tasks
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TaskFilterTest {
@@ -117,5 +119,37 @@ class TaskFilterTest {
             listOf(3L, 4L, 2L, 1L),
             g.ids(TaskFilter(grouping = Grouping.All, sort = SortOrder.Group)),
         )
+    }
+
+    @Test
+    fun `a filter survives being saved as text`() {
+        val f = TaskFilter(
+            grouping = Grouping.Grouped,
+            states = setOf(StateFilter.Done, StateFilter.Blocked),
+            dates = setOf(DateFilter.Overdue, DateFilter.DueWithin7Days),
+            sort = SortOrder.Group,
+        )
+        assertEquals(f, TaskFilter.decode(f.encode()))
+        // Empty chip sets mean "anything" and must stay empty rather than revert to the defaults.
+        val empty = TaskFilter(states = emptySet(), dates = emptySet())
+        assertEquals(empty, TaskFilter.decode(empty.encode()))
+    }
+
+    @Test
+    fun `unreadable saved text falls back to the defaults`() {
+        assertEquals(TaskFilter(), TaskFilter.decode(null))
+        assertEquals(TaskFilter(), TaskFilter.decode("rubbish"))
+        assertEquals(
+            TaskFilter(sort = SortOrder.Created),
+            TaskFilter.decode("grouping=Sideways;states=Open,Waiting,Bogus;sort=Created"),
+        )
+    }
+
+    @Test
+    fun `only the sheet's choices count as customising`() {
+        assertFalse(TaskFilter().isCustomised)
+        assertFalse(TaskFilter(showHidden = true, groupId = 3).isCustomised)
+        assertTrue(TaskFilter(sort = SortOrder.Created).isCustomised)
+        assertTrue(TaskFilter(states = emptySet()).isCustomised)
     }
 }
