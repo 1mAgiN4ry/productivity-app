@@ -2,18 +2,26 @@ package com.example.productivity.ui.tasks
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.productivity.data.tasks.CircularDependencyException
 import com.example.productivity.data.tasks.DeletedTask
+import com.example.productivity.data.tasks.GroupEntity
 import com.example.productivity.data.tasks.GroupSummary
 import com.example.productivity.data.tasks.Grouping
+import com.example.productivity.data.tasks.InvalidDatesException
+import com.example.productivity.data.tasks.TaskEntity
 import com.example.productivity.data.tasks.TaskFilter
 import com.example.productivity.data.tasks.TaskRepository
+import com.example.productivity.data.tasks.TaskState
 import com.example.productivity.data.tasks.TaskStatus
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -30,6 +38,17 @@ data class TaskListUiState(
     val showHidden: Boolean = false,
     val hiddenBlocked: Int = 0,
     val hiddenUpcoming: Int = 0,
+    /** Every group, for choosing one when creating a task. */
+    val allGroups: List<GroupEntity> = emptyList(),
+    /** Group view only: open tasks elsewhere that could be added to this group. */
+    val candidates: List<GroupCandidate> = emptyList(),
+)
+
+data class GroupCandidate(
+    val taskId: Long,
+    val title: String,
+    /** Where it is now, e.g. "No group" or "In Uni · waiting". */
+    val detail: String,
 )
 
 /** Backs both the All view ([groupId] null: loose tasks plus group rows) and a Group view. */
@@ -56,6 +75,19 @@ class TaskListViewModel(
                 showHidden = show,
                 hiddenBlocked = hidden.count { it.isBlocked },
                 hiddenUpcoming = hidden.count { !it.isBlocked },
+                allGroups = graph.groups.sortedBy { it.title.lowercase() },
+                candidates = if (groupId == null) emptyList() else graph.tasks
+                    .filter { it.state.isActive && it.groupId != groupId }
+                    .sortedWith(
+                        compareBy<TaskEntity, String?>(nullsFirst()) {
+                            it.groupId?.let(graph::group)?.title?.lowercase()
+                        }.thenBy { it.title.lowercase() }
+                    )
+                    .map { task ->
+                        val where = task.groupId?.let(graph::group)?.let { "In ${it.title}" } ?: "No group"
+                        val waiting = if (task.state == TaskState.Waiting) " · waiting" else ""
+                        GroupCandidate(task.id, task.title, where + waiting)
+                    },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TaskListUiState())
 
@@ -63,8 +95,40 @@ class TaskListViewModel(
 
     fun toggleHidden() = showHidden.update { !it }
 
-    fun createTask(title: String) {
-        writes.launch { repo.createTask(title, groupId = groupId) }
+    private val _messages = Channel<String>(Channel.BUFFERED)
+
+    /** One-off messages for a snackbar, e.g. tasks that couldn't be added to this group. */
+    val messages: Flow<String> = _messages.receiveAsFlow()
+
+    /** In a group view the task always goes into this group, whatever [group] says. */
+    fun createTask(title: String, group: Long?, startDate: LocalDate?, dueDate: LocalDate?) {
+        writes.launch {
+            try {
+                repo.createTask(title, groupId = groupId ?: group, startDate = startDate, dueDate = dueDate)
+            } catch (e: InvalidDatesException) {
+                _messages.send("${e.message}.")
+            }
+        }
+    }
+
+    /** Moves existing tasks into this group, skipping (and reporting) any that would create a loop. */
+    fun addExisting(taskIds: Set<Long>) {
+        val target = groupId ?: return
+        writes.launch {
+            val refused = mutableListOf<String>()
+            for (id in taskIds) {
+                try {
+                    repo.editTask(id) { it.copy(groupId = target) }
+                } catch (e: CircularDependencyException) {
+                    repo.getTask(id)?.let { refused += it.title }
+                }
+            }
+            if (refused.isNotEmpty()) {
+                val names = refused.joinToString(", ") { "“$it”" }
+                val them = if (refused.size == 1) "it" else "them"
+                _messages.send("Couldn't add $names: that would make $them wait on this group's own tasks.")
+            }
+        }
     }
 
     fun createGroup(title: String) {

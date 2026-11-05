@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -34,8 +32,6 @@ import com.example.productivity.data.tasks.Blocker
 import com.example.productivity.data.tasks.TaskStatus
 import com.example.productivity.ui.theme.GruvBg0
 import com.example.productivity.ui.theme.GruvFg3
-
-private enum class NewKind { Task, Group }
 
 /** Opens whatever is blocking a task: the first blocker, task or group. */
 private fun openBlocker(status: TaskStatus, onOpenTask: (Long) -> Unit, onOpenGroup: (Long) -> Unit) {
@@ -69,9 +65,9 @@ fun AllTasksScreen(
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    var menuOpen by remember { mutableStateOf(false) }
-    var creating by rememberSaveable { mutableStateOf<NewKind?>(null) }
+    var creating by rememberSaveable { mutableStateOf(false) }
     UndoDeleteEffect(vm, snackbar)
+    LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     Box(Modifier.fillMaxSize().background(GruvBg0)) {
         Column(Modifier.fillMaxSize()) {
@@ -114,27 +110,24 @@ fun AllTasksScreen(
                 }
             }
 
-            Box(Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp)) {
-                PrimaryButton("New", icon = TaskIcons.Plus, onClick = { menuOpen = true })
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Task", style = dmSans(16, FontWeight.Medium)) },
-                        onClick = { menuOpen = false; creating = NewKind.Task },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Group", style = dmSans(16, FontWeight.Medium)) },
-                        onClick = { menuOpen = false; creating = NewKind.Group },
-                    )
-                }
-            }
+            PrimaryButton(
+                text = "New",
+                icon = TaskIcons.Plus,
+                onClick = { creating = true },
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp),
+            )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp)) { TaskSnackbar(it) }
     }
 
-    when (creating) {
-        NewKind.Task -> NewItemSheet("New task", "What needs doing?", vm::createTask) { creating = null }
-        NewKind.Group -> NewItemSheet("New group", "e.g. App build", vm::createGroup) { creating = null }
-        null -> Unit
+    if (creating) {
+        NewSheet(
+            groups = state.allGroups,
+            today = state.today,
+            onCreateTask = vm::createTask,
+            onCreateGroup = vm::createGroup,
+            onDismiss = { creating = false },
+        )
     }
 }
 
@@ -152,6 +145,7 @@ fun GroupScreen(
     var renaming by rememberSaveable { mutableStateOf(false) }
     var dismantling by rememberSaveable { mutableStateOf(false) }
     UndoDeleteEffect(vm, snackbar)
+    LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     val group = state.group
     if (!state.loading && group == null) {
@@ -186,16 +180,14 @@ fun GroupScreen(
                 )
                 Box {
                     PlainIconButton(TaskIcons.More, "Group options", { menuOpen = true })
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Rename", style = dmSans(16, FontWeight.Medium)) },
-                            onClick = { menuOpen = false; renaming = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dismantle", style = dmSans(16, FontWeight.Medium)) },
-                            onClick = { menuOpen = false; dismantling = true },
-                        )
-                    }
+                    TaskMenu(
+                        expanded = menuOpen,
+                        onDismiss = { menuOpen = false },
+                        items = listOf(
+                            "Rename" to { renaming = true },
+                            "Dismantle" to { dismantling = true },
+                        ),
+                    )
                 }
             }
 
@@ -226,7 +218,7 @@ fun GroupScreen(
             }
 
             PrimaryButton(
-                text = "New task",
+                text = "Add task",
                 icon = TaskIcons.Plus,
                 onClick = { creating = true },
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp),
@@ -235,8 +227,15 @@ fun GroupScreen(
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp)) { TaskSnackbar(it) }
     }
 
-    if (creating) {
-        NewItemSheet("New task", "What needs doing?", vm::createTask) { creating = false }
+    if (creating && group != null) {
+        AddToGroupSheet(
+            groupTitle = group.group.title,
+            candidates = state.candidates,
+            today = state.today,
+            onCreateTask = { title, start, due -> vm.createTask(title, group.group.id, start, due) },
+            onAddExisting = vm::addExisting,
+            onDismiss = { creating = false },
+        )
     }
     if (renaming && group != null) {
         TextInputDialog("Rename group", group.group.title, "Rename", vm::renameGroup) { renaming = false }

@@ -17,6 +17,7 @@ object TaskIcons {
     )
     val Layers = strokeIcon("Layers", 2f, "M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5")
     val ChevronRight = strokeIcon("ChevronRight", 2.2f, "M9 6l6 6-6 6")
+    val ChevronDown = strokeIcon("ChevronDown", 2.2f, "M6 9l6 6 6-6")
     val ChevronLeft = strokeIcon("ChevronLeft", 2.2f, "M15 6l-6 6 6 6")
     val Plus = strokeIcon("Plus", 2.6f, "M12 5v14M5 12h14")
     val PlusThin = strokeIcon("PlusThin", 2.4f, "M12 5v14M5 12h14")

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.map
 
 class CircularDependencyException(message: String) : IllegalArgumentException(message)
 
+class InvalidDatesException : IllegalArgumentException("The start date can't be after the due date")
+
 /** Everything removed with a task, so the deletion can be undone. */
 data class DeletedTask(
     val task: TaskEntity,
@@ -71,16 +73,17 @@ class TaskRepository(
         groupId: Long? = null,
         startDate: LocalDate? = null,
         dueDate: LocalDate? = null,
-    ): Long = dao.insertTask(
+    ): Long {
+        checkDateOrder(startDate, dueDate)
         // A new task has no dependencies of its own, so it can't close a loop.
-        TaskEntity(
+        return dao.insertTask(TaskEntity(
             title = cleanTitle(title),
             groupId = groupId,
             startDate = startDate,
             dueDate = dueDate,
             createdAt = now(),
-        )
-    )
+        ))
+    }
 
     /**
      * Applies [change] to the current stored version of a task, so concurrent edits to different
@@ -94,6 +97,10 @@ class TaskRepository(
             existing,
             edited.copy(id = existing.id, title = cleanTitle(edited.title), createdAt = existing.createdAt),
         )
+        // Only when a date changes, so older data that breaks the rule can still be edited otherwise.
+        if (updated.startDate != existing.startDate || updated.dueDate != existing.dueDate) {
+            checkDateOrder(updated.startDate, updated.dueDate)
+        }
         if (updated.groupId != existing.groupId && loadGraph().withTask(updated).hasCycle()) {
             throw CircularDependencyException("Moving it into that group would make it wait on itself")
         }
@@ -188,6 +195,11 @@ class TaskRepository(
     private suspend fun loadGraph() = TaskGraph(
         dao.getTasks(), dao.getGroups(), dao.getTaskDependencies(), dao.getGroupDependencies(),
     )
+
+    /** @throws InvalidDatesException if the start date is after the due date (same day is fine). */
+    private fun checkDateOrder(start: LocalDate?, due: LocalDate?) {
+        if (start != null && due != null && start.isAfter(due)) throw InvalidDatesException()
+    }
 
     private fun cleanTitle(title: String): String =
         title.trim().also { require(it.isNotEmpty()) { "Title can't be blank" } }

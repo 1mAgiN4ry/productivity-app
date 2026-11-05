@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,13 +16,21 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -390,4 +399,143 @@ internal fun TaskSnackbar(data: SnackbarData) {
         actionColor = GruvBg0,
         shape = RoundedCornerShape(16.dp),
     )
+}
+
+/** A label with a value on the right, e.g. a due date. Tappable unless [onClick] is null. */
+@Composable
+internal fun PropertyRow(label: String, onClick: (() -> Unit)?, value: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .bottomRule(GruvBg2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = dmSans(16, FontWeight.Medium), modifier = Modifier.weight(1f))
+        value()
+    }
+}
+
+/** The "+ Add" value shown for an empty date. */
+@Composable
+internal fun AddValue() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(TaskIcons.PlusThin, contentDescription = null, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text("Add", style = dmSans(16, FontWeight.Medium))
+    }
+}
+
+/**
+ * A property row whose value opens a dropdown of [options]. The first option is the "none" choice,
+ * shown dimmed. Long names are cut short with "…", and a long list scrolls.
+ */
+@Composable
+internal fun <K> DropdownField(label: String, options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val current = options.firstOrNull { it.first == selected } ?: options.first()
+    val isNone = current == options.first()
+    PropertyRow(label, onClick = { open = true }) {
+        Box(Modifier.widthIn(max = 220.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = current.second,
+                    style = dmSans(16, FontWeight.Medium, if (isNone) GruvFg3 else GruvFg0),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Icon(TaskIcons.ChevronDown, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+            DropdownMenu(
+                expanded = open,
+                onDismissRequest = { open = false },
+                modifier = Modifier.heightIn(max = 320.dp).widthIn(min = 200.dp, max = 280.dp),
+                shape = RoundedCornerShape(20.dp),
+                containerColor = GruvBg0,
+                border = BorderStroke(2.dp, GruvFg0),
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+            ) {
+                options.forEachIndexed { i, (key, name) ->
+                    val on = key == selected
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = name,
+                                style = dmSans(16, FontWeight.Bold, if (i == 0) GruvFg3 else GruvFg0),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        trailingIcon = if (on) {
+                            { Icon(TaskIcons.Check, contentDescription = "Selected", modifier = Modifier.size(18.dp)) }
+                        } else {
+                            null
+                        },
+                        onClick = {
+                            open = false
+                            onSelect(key)
+                        },
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A row with a round tick box, for picking several items. */
+@Composable
+internal fun TickRow(title: String, detail: String, checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
+            .bottomRule(GruvBg2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(if (checked) GruvFg0 else Color.Transparent)
+                .border(2.dp, GruvFg0, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) Icon(TaskIcons.Check, contentDescription = null, tint = GruvBg0, modifier = Modifier.size(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = dmSans(16, FontWeight.Medium))
+            Text(detail, style = dmSans(12, color = GruvFg3))
+        }
+    }
+}
+
+/** A dropdown menu in the app's style: dark surface, cream outline, rounded like the pills. */
+@Composable
+internal fun TaskMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<Pair<String, () -> Unit>>) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(20.dp),
+        containerColor = GruvBg0,
+        border = BorderStroke(2.dp, GruvFg0),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        items.forEach { (label, action) ->
+            DropdownMenuItem(
+                text = { Text(label, style = dmSans(16, FontWeight.Bold)) },
+                onClick = {
+                    onDismiss()
+                    action()
+                },
+                contentPadding = PaddingValues(horizontal = 20.dp),
+            )
+        }
+    }
 }

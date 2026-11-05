@@ -7,14 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -128,17 +126,17 @@ fun TaskDetailScreen(
                 }
 
                 Column {
-                    DetailRow("Group", onClick = { dialog = DetailDialog.Group }) {
+                    PropertyRow("Group", onClick = { dialog = DetailDialog.Group }) {
                         Text(state.groupTitle ?: "None", style = dmSans(16, FontWeight.Medium, GruvFg3))
                     }
-                    DetailRow("Start date", onClick = { dialog = DetailDialog.StartDate }) {
+                    PropertyRow("Start date", onClick = { dialog = DetailDialog.StartDate }) {
                         task.startDate?.let { Text(TaskFormat.date(it, today), style = dmMono(15, GruvFg0)) } ?: AddValue()
                     }
-                    DetailRow("Due date", onClick = { dialog = DetailDialog.DueDate }) {
+                    PropertyRow("Due date", onClick = { dialog = DetailDialog.DueDate }) {
                         task.dueDate?.let { Text(TaskFormat.date(it, today), style = dmMono(15, GruvYellow)) } ?: AddValue()
                     }
                     // Read-only until reminders are built.
-                    DetailRow("Reminder", onClick = null) {
+                    PropertyRow("Reminder", onClick = null) {
                         Text(task.reminder?.let(TaskFormat::reminder) ?: "None", style = dmMono(15, GruvFg3))
                     }
                 }
@@ -186,8 +184,10 @@ fun TaskDetailScreen(
             onDismiss = { dialog = null },
         )
         DetailDialog.Group -> GroupPickerSheet(state.groups, task.groupId, vm::moveToGroup) { dialog = null }
-        DetailDialog.StartDate -> TaskDatePicker(task.startDate, vm::setStartDate) { dialog = null }
-        DetailDialog.DueDate -> TaskDatePicker(task.dueDate, vm::setDueDate) { dialog = null }
+        DetailDialog.StartDate ->
+            TaskDatePicker("Start date", task.startDate, vm::setStartDate, { dialog = null }, maxDate = task.dueDate)
+        DetailDialog.DueDate ->
+            TaskDatePicker("Due date", task.dueDate, vm::setDueDate, { dialog = null }, minDate = task.startDate)
         null -> Unit
     }
 }
@@ -248,30 +248,6 @@ private fun BlockedBanner(blockers: List<Blocker>) {
 @Composable
 private fun SectionLabel(text: String) {
     Text(text, style = dmSans(13, FontWeight.Bold, GruvFg3))
-}
-
-@Composable
-private fun DetailRow(label: String, onClick: (() -> Unit)?, value: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .bottomRule(GruvBg2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = dmSans(16, FontWeight.Medium), modifier = Modifier.weight(1f))
-        value()
-    }
-}
-
-@Composable
-private fun AddValue() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(TaskIcons.PlusThin, contentDescription = null, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(4.dp))
-        Text("Add", style = dmSans(16, FontWeight.Medium))
-    }
 }
 
 @Composable

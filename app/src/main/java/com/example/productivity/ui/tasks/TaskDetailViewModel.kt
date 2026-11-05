@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.productivity.data.tasks.CircularDependencyException
 import com.example.productivity.data.tasks.DependencyTarget
 import com.example.productivity.data.tasks.GroupEntity
+import com.example.productivity.data.tasks.InvalidDatesException
+import com.example.productivity.data.tasks.TaskEntity
 import com.example.productivity.data.tasks.TaskRepository
 import com.example.productivity.data.tasks.TaskState
 import com.example.productivity.data.tasks.TaskStatus
@@ -95,12 +97,19 @@ class TaskDetailViewModel(
         }
     }
 
-    fun setStartDate(date: LocalDate?) {
-        writes.launch { repo.editTask(taskId) { it.copy(startDate = date) } }
-    }
+    fun setStartDate(date: LocalDate?) = editDates { it.copy(startDate = date) }
 
-    fun setDueDate(date: LocalDate?) {
-        writes.launch { repo.editTask(taskId) { it.copy(dueDate = date) } }
+    fun setDueDate(date: LocalDate?) = editDates { it.copy(dueDate = date) }
+
+    // The pickers already prevent a start after the due date; this covers anything that slips by.
+    private fun editDates(change: (TaskEntity) -> TaskEntity) {
+        writes.launch {
+            try {
+                repo.editTask(taskId, change)
+            } catch (e: InvalidDatesException) {
+                _messages.send("${e.message}.")
+            }
+        }
     }
 
     /** Deletes the task and hands it to [TaskUndo]; returns once it's gone. */

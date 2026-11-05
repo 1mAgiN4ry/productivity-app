@@ -145,6 +145,27 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun startDateCannotBeAfterDueDate() = runBlocking<Unit> {
+        assertThrows(InvalidDatesException::class.java) {
+            runBlocking { repo.createTask("Bad", startDate = today.plusDays(2), dueDate = today) }
+        }
+        val id = repo.createTask("Same day is fine", startDate = today, dueDate = today)
+
+        assertThrows(InvalidDatesException::class.java) {
+            runBlocking { repo.editTask(id) { it.copy(startDate = today.plusDays(1)) } }
+        }
+        assertThrows(InvalidDatesException::class.java) {
+            runBlocking { repo.editTask(id) { it.copy(dueDate = today.minusDays(1)) } }
+        }
+        assertEquals(today, repo.getTask(id)!!.startDate)
+        assertEquals(today, repo.getTask(id)!!.dueDate)
+
+        // Edits that don't touch the dates are unaffected.
+        repo.editTask(id) { it.copy(title = "Renamed") }
+        assertEquals("Renamed", repo.getTask(id)!!.title)
+    }
+
+    @Test
     fun titlesAreTrimmedAndMustNotBeBlank() = runBlocking<Unit> {
         val id = repo.createTask("  Renew bike lock  ")
         assertEquals("Renew bike lock", repo.getTask(id)!!.title)

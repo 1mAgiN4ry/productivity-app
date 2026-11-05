@@ -6,13 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -23,12 +21,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,11 +34,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.example.productivity.data.tasks.GroupEntity
@@ -56,7 +51,7 @@ import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TaskSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun TaskSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -67,43 +62,6 @@ private fun TaskSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
         dragHandle = { BottomSheetDefaults.DragHandle(color = GruvFg4) },
     ) {
         content()
-    }
-}
-
-/** "New task" / "New group": a title field and a Create button. */
-@Composable
-internal fun NewItemSheet(heading: String, placeholder: String, onCreate: (String) -> Unit, onDismiss: () -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    val focus = remember { FocusRequester() }
-    val create = {
-        if (title.isNotBlank()) {
-            onCreate(title)
-            onDismiss()
-        }
-    }
-    TaskSheet(onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            Text(heading, style = dmSans(22, FontWeight.Bold))
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                placeholder = { Text(placeholder, color = GruvFg4) },
-                singleLine = true,
-                textStyle = dmSans(16, FontWeight.Medium),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { create() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
-            PrimaryButton("Create", onClick = create, enabled = title.isNotBlank())
-        }
-        // Inside the sheet, so it runs only once the text field above actually exists.
-        LaunchedEffect(Unit) { focus.requestFocus() }
     }
 }
 
@@ -234,26 +192,58 @@ internal fun WaitingDialog(
         containerColor = GruvBg1,
     )
     if (picking) {
-        TaskDatePicker(initial = checkBack, onPick = { checkBack = it }, onDismiss = { picking = false })
+        TaskDatePicker(
+            heading = "Check back",
+            initial = checkBack,
+            onPick = { checkBack = it },
+            onDismiss = { picking = false },
+            minDate = today,
+        )
     }
 }
 
-/** Android's date picker, Gruvbox-themed, with "Remove" to clear an existing date. */
+/**
+ * Android's date picker, Gruvbox-themed, with "Remove" to clear an existing date. Dates outside
+ * [minDate]..[maxDate] are greyed out and can't be picked.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TaskDatePicker(initial: LocalDate?, onPick: (LocalDate?) -> Unit, onDismiss: () -> Unit) {
-    // The picker works in UTC midnight millis.
+internal fun TaskDatePicker(
+    heading: String,
+    initial: LocalDate?,
+    onPick: (LocalDate?) -> Unit,
+    onDismiss: () -> Unit,
+    minDate: LocalDate? = null,
+    maxDate: LocalDate? = null,
+) {
+    val selectable = remember(minDate, maxDate) {
+        object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                inRange(utcTimeMillis.toDate(), minDate, maxDate)
+
+            override fun isSelectableYear(year: Int): Boolean =
+                (minDate == null || year >= minDate.year) && (maxDate == null || year <= maxDate.year)
+        }
+    }
+    // Open on the chosen date, else today, else the nearest allowed month.
+    val shown = initial ?: LocalDate.now().let { today ->
+        when {
+            minDate != null && today.isBefore(minDate) -> minDate
+            maxDate != null && today.isAfter(maxDate) -> maxDate
+            else -> today
+        }
+    }
     val state = rememberDatePickerState(
-        initialSelectedDateMillis = initial?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+        initialSelectedDateMillis = initial?.toUtcMillis(),
+        initialDisplayedMonthMillis = shown.withDayOfMonth(1).toUtcMillis(),
+        selectableDates = selectable,
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
                 onClick = {
-                    state.selectedDateMillis?.let {
-                        onPick(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
-                    }
+                    state.selectedDateMillis?.let { onPick(it.toDate()) }
                     onDismiss()
                 },
                 enabled = state.selectedDateMillis != null,
@@ -268,7 +258,23 @@ internal fun TaskDatePicker(initial: LocalDate?, onPick: (LocalDate?) -> Unit, o
             }
         },
     ) {
-        DatePicker(state = state)
+        DatePicker(
+            state = state,
+            title = {
+                Text(
+                    text = heading,
+                    style = dmSans(14, FontWeight.Medium, GruvFg3),
+                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                )
+            },
+        )
     }
 }
+
+// The picker works in UTC-midnight milliseconds.
+private fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+private fun Long.toDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+
+internal fun inRange(date: LocalDate, min: LocalDate?, max: LocalDate?): Boolean =
+    (min == null || !date.isBefore(min)) && (max == null || !date.isAfter(max))
 
