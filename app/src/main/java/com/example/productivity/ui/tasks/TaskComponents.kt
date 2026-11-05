@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -26,9 +27,13 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,8 +48,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -115,17 +123,27 @@ internal fun Modifier.dashedBorder(color: Color, width: Dp = 2.dp, radius: Dp = 
 
 // Rows
 
-/** [groupName] is shown in the flat lists, where tasks from different groups sit together. */
+/**
+ * [groupName] is shown in the flat lists, where tasks from different groups sit together.
+ * [onStart] adds the ▶ button that starts a pomodoro on the task (open and waiting tasks only).
+ */
 @Composable
-internal fun TaskRow(status: TaskStatus, today: LocalDate, groupName: String? = null, onClick: () -> Unit) {
+internal fun TaskRow(
+    status: TaskStatus,
+    today: LocalDate,
+    groupName: String? = null,
+    onStart: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val task = status.task
     val finished = !task.state.isActive
+    val showStart = onStart != null && !finished
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .bottomRule(GruvBg2)
-            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 14.dp),
+            .padding(start = 24.dp, end = if (showStart) 10.dp else 24.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -177,6 +195,50 @@ internal fun TaskRow(status: TaskStatus, today: LocalDate, groupName: String? = 
                 }
             }
         }
+        if (showStart) PlainIconButton(TaskIcons.Play, "Start pomodoro on this task", onStart!!, iconSize = 18.dp)
+    }
+}
+
+/**
+ * Swipe right to mark a task done. [onDone] is also offered to screen readers as an action,
+ * since they can't swipe. Without [onDone] the row doesn't swipe.
+ */
+@Composable
+internal fun SwipeToDone(onDone: (() -> Unit)?, resetKey: Any?, content: @Composable () -> Unit) {
+    if (onDone == null) {
+        content()
+        return
+    }
+    val swipe = rememberSwipeToDismissBoxState(
+        confirmValueChange = {
+            if (it == SwipeToDismissBoxValue.StartToEnd) onDone()
+            it != SwipeToDismissBoxValue.EndToStart
+        },
+    )
+    // If the row stays (e.g. the filter shows done tasks), slide it back once its state changes.
+    LaunchedEffect(resetKey) {
+        if (swipe.currentValue != SwipeToDismissBoxValue.Settled) swipe.snapTo(SwipeToDismissBoxValue.Settled)
+    }
+    SwipeToDismissBox(
+        state = swipe,
+        enableDismissFromEndToStart = false,
+        modifier = Modifier.semantics {
+            customActions = listOf(CustomAccessibilityAction("Mark done") { onDone(); true })
+        },
+        backgroundContent = {
+            // Only while swiping, and silent: the row's "Mark done" action already says this.
+            if (swipe.dismissDirection != SwipeToDismissBoxValue.StartToEnd) return@SwipeToDismissBox
+            Row(
+                modifier = Modifier.fillMaxSize().clearAndSetSemantics {}.background(GruvFg0).padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(TaskIcons.Check, contentDescription = null, tint = GruvBg0, modifier = Modifier.size(22.dp))
+                Text("Done", style = dmSans(16, FontWeight.Bold, GruvBg0))
+            }
+        },
+    ) {
+        Box(Modifier.background(GruvBg0)) { content() }
     }
 }
 
@@ -243,23 +305,6 @@ internal fun GroupRow(summary: GroupSummary, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Icon(TaskIcons.ChevronRight, contentDescription = null, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** Rows for a list of tasks: normal rows, or muted ones for blocked/upcoming tasks. */
-@Composable
-internal fun TaskRows(
-    tasks: List<TaskStatus>,
-    today: LocalDate,
-    onTaskClick: (Long) -> Unit,
-    onBlockerClick: (TaskStatus) -> Unit,
-) {
-    tasks.forEach { status ->
-        if (status.isHidden) {
-            HiddenTaskRow(status, today, { onTaskClick(status.task.id) }, { onBlockerClick(status) })
-        } else {
-            TaskRow(status, today) { onTaskClick(status.task.id) }
-        }
     }
 }
 

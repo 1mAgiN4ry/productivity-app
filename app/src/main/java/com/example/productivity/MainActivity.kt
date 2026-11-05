@@ -21,6 +21,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -182,14 +183,27 @@ fun MainAppScreen() {
                 .consumeWindowInsets(innerPadding)
         ) {
             composable(Screen.Pomodoro.route) {
+                val choices by pomodoro.taskChoices.collectAsState()
                 PomodoroScreen(
                     state = pomodoro.state,
                     onModeChange = pomodoro::selectMode,
                     onStartPause = pomodoro::toggle,
-                    onReset = pomodoro::reset
+                    onReset = pomodoro::reset,
+                    taskTitle = pomodoro.task.title,
+                    onTaskTyped = pomodoro::typeTask,
+                    taskChoices = choices,
+                    linkedTaskId = pomodoro.task.taskId,
+                    onTaskPicked = pomodoro::pickTask,
                 )
             }
-            taskGraph(navController)
+            taskGraph(navController, onStartPomodoro = { taskId ->
+                pomodoro.startOn(taskId)
+                navController.navigate(Screen.Pomodoro.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            })
             composable(Screen.HabitTracker.route) {
                 HabitTrackerScreen()
             }

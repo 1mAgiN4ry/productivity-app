@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.performTextReplacement
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -23,6 +25,7 @@ import com.example.productivity.data.tasks.DependencyTarget
 import com.example.productivity.data.tasks.TaskFilter
 import com.example.productivity.data.tasks.TaskFilterStore
 import com.example.productivity.data.tasks.TaskRepository
+import com.example.productivity.data.tasks.StateFilter
 import com.example.productivity.data.tasks.TaskState
 import com.example.productivity.ui.theme.GruvboxTheme
 import kotlinx.coroutines.CoroutineScope
@@ -68,14 +71,17 @@ class TaskScreensTest {
         onOpenTask: (Long) -> Unit = {},
         onOpenGroup: (Long) -> Unit = {},
         filters: TaskFilterStore = TaskFilterStore(null),
+        onStartPomodoro: (Long) -> Unit = {},
     ) {
         val vm = TaskListViewModel(repo, undo, writes, groupId = null, filters)
-        compose.setContent { GruvboxTheme { AllTasksScreen(vm, onOpenTask, onOpenGroup) } }
+        compose.setContent { GruvboxTheme { AllTasksScreen(vm, onOpenTask, onOpenGroup, onStartPomodoro) } }
     }
 
-    private fun showDetail(taskId: Long) {
+    private fun showDetail(taskId: Long, onStartPomodoro: (Long) -> Unit = {}) {
         val vm = TaskDetailViewModel(repo, undo, writes, taskId)
-        compose.setContent { GruvboxTheme { TaskDetailScreen(vm, onBack = {}, onOpenTask = {}, onOpenGroup = {}) } }
+        compose.setContent {
+            GruvboxTheme { TaskDetailScreen(vm, onBack = {}, onOpenTask = {}, onOpenGroup = {}, onStartPomodoro = onStartPomodoro) }
+        }
     }
 
     @Test
@@ -197,6 +203,56 @@ class TaskScreensTest {
         compose.waitUntilAtLeastOneExists(hasText("No tasks match this filter."), timeoutMillis = 5_000)
         compose.onNodeWithText("Clear filter").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Pay rent"), timeoutMillis = 5_000)
+    }
+
+    @Test
+    fun swipingRightMarksATaskDoneAndUndoPutsItBack() {
+        val id = runBlocking {
+            repo.createTask("Chase the plumber").also { repo.setState(it, TaskState.Waiting, "Waiting for a quote") }
+        }
+        showAllTasks()
+        compose.waitUntilAtLeastOneExists(hasText("Chase the plumber"), timeoutMillis = 5_000)
+
+        compose.onNodeWithText("Chase the plumber").performTouchInput { swipeRight(startX = left, endX = right * 3) }
+        compose.waitUntil(5_000) { runBlocking { repo.getTask(id)?.state } == TaskState.Done }
+
+        compose.waitUntilAtLeastOneExists(hasText("Undo"), timeoutMillis = 5_000)
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitUntil(5_000) {
+            val task = runBlocking { repo.getTask(id) }
+            task?.state == TaskState.Waiting && task.waitingNote == "Waiting for a quote"
+        }
+    }
+
+    @Test
+    fun thePlayButtonStartsAPomodoroOnThatTask() {
+        val id = runBlocking { repo.createTask("Write the essay") }
+        var started: Long? = null
+        showAllTasks(onStartPomodoro = { started = it })
+
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Start pomodoro on this task"), timeoutMillis = 5_000)
+        compose.onNodeWithContentDescription("Start pomodoro on this task").performClick()
+        assertEquals(id, started)
+    }
+
+    @Test
+    fun doneTasksHaveNoPlayButton() {
+        runBlocking { repo.createTask("Water the plants").also { repo.setState(it, TaskState.Done) } }
+        showAllTasks(filters = TaskFilterStore(null).apply { set(TaskFilter(states = setOf(StateFilter.Done))) })
+
+        compose.waitUntilAtLeastOneExists(hasText("Water the plants"), timeoutMillis = 5_000)
+        compose.onNodeWithContentDescription("Start pomodoro on this task").assertDoesNotExist()
+    }
+
+    @Test
+    fun theTaskPageCanStartAPomodoro() {
+        val id = runBlocking { repo.createTask("Write the essay") }
+        var started: Long? = null
+        showDetail(id, onStartPomodoro = { started = it })
+
+        compose.waitUntilAtLeastOneExists(hasText("Start pomodoro"), timeoutMillis = 5_000)
+        compose.onNodeWithText("Start pomodoro").performClick()
+        assertEquals(id, started)
     }
 
     @Test

@@ -26,7 +26,8 @@ object TaskRoutes {
     fun task(id: Long) = "tasks/task/$id"
 }
 
-fun NavGraphBuilder.taskGraph(nav: NavController) {
+/** [onStartPomodoro] gets a task id from a ▶ button or a task's "Start pomodoro". */
+fun NavGraphBuilder.taskGraph(nav: NavController, onStartPomodoro: (Long) -> Unit) {
     navigation(startDestination = TaskRoutes.ALL, route = TaskRoutes.GRAPH) {
         composable(TaskRoutes.ALL) {
             val c = container()
@@ -36,6 +37,7 @@ fun NavGraphBuilder.taskGraph(nav: NavController) {
                     vm = vm,
                     onOpenTask = { nav.navigate(TaskRoutes.task(it)) },
                     onOpenGroup = { nav.navigate(TaskRoutes.group(it)) },
+                    onStartPomodoro = onStartPomodoro,
                 )
             }
         }
@@ -52,6 +54,7 @@ fun NavGraphBuilder.taskGraph(nav: NavController) {
                     onBack = nav.backFrom(entry),
                     onOpenTask = { nav.navigate(TaskRoutes.task(it)) },
                     onOpenGroup = { if (it != groupId) nav.navigate(TaskRoutes.group(it)) },
+                    onStartPomodoro = onStartPomodoro,
                 )
             }
         }
@@ -68,6 +71,7 @@ fun NavGraphBuilder.taskGraph(nav: NavController) {
                     onBack = nav.backFrom(entry),
                     onOpenTask = { if (it != taskId) nav.navigate(TaskRoutes.task(it)) },
                     onOpenGroup = { nav.navigate(TaskRoutes.group(it)) },
+                    onStartPomodoro = onStartPomodoro,
                 )
             }
         }

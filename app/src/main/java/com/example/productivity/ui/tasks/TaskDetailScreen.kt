@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -36,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -66,6 +69,7 @@ fun TaskDetailScreen(
     onBack: () -> Unit,
     onOpenTask: (Long) -> Unit,
     onOpenGroup: (Long) -> Unit,
+    onStartPomodoro: (Long) -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -90,6 +94,8 @@ fun TaskDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 PlainIconButton(TaskIcons.ChevronLeft, "Back to tasks", onBack)
+                Spacer(Modifier.weight(1f))
+                if (task.state.isActive) StartPomodoroButton { onStartPomodoro(task.id) }
             }
 
             Column(
@@ -269,5 +275,23 @@ private fun DependencyRow(dep: DependencyItem, onClick: () -> Unit) {
             Text(dep.title, style = dmSans(16, FontWeight.Medium))
             Text(dep.detail, style = dmSans(12, color = GruvFg3))
         }
+    }
+}
+
+/** The header's cream "▶ Start pomodoro". */
+@Composable
+private fun StartPomodoroButton(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(GruvFg0)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(TaskIcons.Play, contentDescription = null, tint = GruvBg0, modifier = Modifier.size(16.dp))
+        Text("Start pomodoro", style = dmSans(15, FontWeight.Bold, GruvBg0))
     }
 }

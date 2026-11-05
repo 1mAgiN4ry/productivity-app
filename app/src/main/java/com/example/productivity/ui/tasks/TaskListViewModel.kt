@@ -167,6 +167,28 @@ class TaskListViewModel(
         }
     }
 
+    private val _completed = Channel<TaskEntity>(Channel.BUFFERED)
+
+    /** Tasks just marked done by a swipe, as they were before, for an Undo snackbar. */
+    val completed: Flow<TaskEntity> = _completed.receiveAsFlow()
+
+    fun markDone(taskId: Long) {
+        writes.launch {
+            val before = repo.getTask(taskId) ?: return@launch
+            if (!before.state.isActive) return@launch // Already done (e.g. a repeated swipe callback).
+            repo.setState(taskId, TaskState.Done)
+            _completed.send(before)
+        }
+    }
+
+    /** Puts a task back as it was before [markDone], waiting note and all. */
+    fun undoDone(before: TaskEntity) {
+        writes.launch {
+            if (repo.getTask(before.id) == null) return@launch // Deleted since.
+            repo.setState(before.id, before.state, before.waitingNote, before.checkBackDate)
+        }
+    }
+
     fun createGroup(title: String) {
         writes.launch { repo.createGroup(title) }
     }

@@ -1,5 +1,7 @@
 package com.example.productivity.ui.screens
 
+import com.example.productivity.ui.tasks.TaskChoice
+import com.example.productivity.ui.tasks.TaskPickerSheet
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -78,7 +80,11 @@ fun PomodoroScreen(
     onStartPause: () -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
-    onPickTask: () -> Unit = {},
+    taskTitle: String = "",
+    onTaskTyped: (String) -> Unit = {},
+    taskChoices: List<TaskChoice> = emptyList(),
+    linkedTaskId: Long? = null,
+    onTaskPicked: (TaskChoice) -> Unit = {},
 ) {
     val mode = state.mode
     // Same 300ms tween as the Scaffold background, so the "cut-out" colours stay in sync.
@@ -87,7 +93,7 @@ fun PomodoroScreen(
         animationSpec = tween(durationMillis = 300),
         label = "PomodoroModeColor"
     )
-    var task by rememberSaveable { mutableStateOf("") }
+    var picking by rememberSaveable { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalContentColor provides PomodoroInk) {
         Column(
@@ -140,11 +146,20 @@ fun PomodoroScreen(
                 }
             }
             TaskField(
-                value = task,
-                onValueChange = { task = it },
-                onPickTask = onPickTask,
+                value = taskTitle,
+                onValueChange = onTaskTyped,
+                onPickTask = { picking = true },
             )
         }
+    }
+
+    if (picking) {
+        TaskPickerSheet(
+            choices = taskChoices,
+            selectedId = linkedTaskId,
+            onPick = onTaskPicked,
+            onDismiss = { picking = false },
+        )
     }
 }
 

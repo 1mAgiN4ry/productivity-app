@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.productivity.data.tasks.Blocker
 import com.example.productivity.data.tasks.TaskStatus
+import java.time.LocalDate
 import com.example.productivity.ui.theme.GruvBg0
 import com.example.productivity.ui.theme.GruvFg3
 
@@ -60,17 +61,60 @@ private fun UndoDeleteEffect(vm: TaskListViewModel, host: SnackbarHostState) {
     }
 }
 
+/** "Marked … done" with Undo, after a swipe. */
+@Composable
+private fun UndoDoneEffect(vm: TaskListViewModel, host: SnackbarHostState) {
+    LaunchedEffect(vm) {
+        vm.completed.collect { before ->
+            val result = host.showSnackbar(
+                message = "Marked “${before.title}” done",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) vm.undoDone(before)
+        }
+    }
+}
+
+/** A list row: muted for blocked/upcoming tasks, otherwise swipeable with a ▶ button. */
+@Composable
+private fun ListTaskRow(
+    status: TaskStatus,
+    today: LocalDate,
+    groupName: String?,
+    vm: TaskListViewModel,
+    onOpenTask: (Long) -> Unit,
+    onOpenGroup: (Long) -> Unit,
+    onStartPomodoro: (Long) -> Unit,
+) {
+    val id = status.task.id
+    if (status.isHidden) {
+        HiddenTaskRow(
+            status, today,
+            onClick = { onOpenTask(id) },
+            onBlockerClick = { openBlocker(status, onOpenTask, onOpenGroup) },
+        )
+    } else {
+        val active = status.task.state.isActive
+        SwipeToDone(onDone = if (active) ({ vm.markDone(id) }) else null, resetKey = status.task.state) {
+            TaskRow(status, today, groupName, onStart = { onStartPomodoro(id) }) { onOpenTask(id) }
+        }
+    }
+}
+
 @Composable
 fun AllTasksScreen(
     vm: TaskListViewModel,
     onOpenTask: (Long) -> Unit,
     onOpenGroup: (Long) -> Unit,
+    onStartPomodoro: (Long) -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var creating by rememberSaveable { mutableStateOf(false) }
     var filtering by rememberSaveable { mutableStateOf(false) }
     UndoDeleteEffect(vm, snackbar)
+    UndoDoneEffect(vm, snackbar)
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     Box(Modifier.fillMaxSize().background(GruvBg0)) {
@@ -104,16 +148,8 @@ fun AllTasksScreen(
                     item { EmptyMessage("Nothing here yet. Tap New to add a task or a group.") }
                 }
                 items(state.tasks, key = { "task-${it.task.id}" }) { status ->
-                    if (status.isHidden) {
-                        HiddenTaskRow(
-                            status, state.today,
-                            onClick = { onOpenTask(status.task.id) },
-                            onBlockerClick = { openBlocker(status, onOpenTask, onOpenGroup) },
-                        )
-                    } else {
-                        val groupName = status.task.groupId?.let(state.groupLabels::get)
-                        TaskRow(status, state.today, groupName) { onOpenTask(status.task.id) }
-                    }
+                    val groupName = status.task.groupId?.let(state.groupLabels::get)
+                    ListTaskRow(status, state.today, groupName, vm, onOpenTask, onOpenGroup, onStartPomodoro)
                 }
                 items(state.groups, key = { "group-${it.group.id}" }) { summary ->
                     GroupRow(summary) { onOpenGroup(summary.group.id) }
@@ -158,6 +194,7 @@ fun GroupScreen(
     onBack: () -> Unit,
     onOpenTask: (Long) -> Unit,
     onOpenGroup: (Long) -> Unit,
+    onStartPomodoro: (Long) -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -166,6 +203,7 @@ fun GroupScreen(
     var renaming by rememberSaveable { mutableStateOf(false) }
     var dismantling by rememberSaveable { mutableStateOf(false) }
     UndoDeleteEffect(vm, snackbar)
+    UndoDoneEffect(vm, snackbar)
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     val group = state.group
@@ -217,15 +255,7 @@ fun GroupScreen(
                     item { EmptyMessage("No open tasks in this group.") }
                 }
                 items(state.tasks, key = { it.task.id }) { status ->
-                    if (status.isHidden) {
-                        HiddenTaskRow(
-                            status, state.today,
-                            onClick = { onOpenTask(status.task.id) },
-                            onBlockerClick = { openBlocker(status, onOpenTask, onOpenGroup) },
-                        )
-                    } else {
-                        TaskRow(status, state.today) { onOpenTask(status.task.id) }
-                    }
+                    ListTaskRow(status, state.today, null, vm, onOpenTask, onOpenGroup, onStartPomodoro)
                 }
                 item {
                     HiddenTasksLink(state.showHidden, state.hiddenBlocked, state.hiddenUpcoming, vm::toggleHidden)

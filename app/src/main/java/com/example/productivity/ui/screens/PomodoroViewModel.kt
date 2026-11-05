@@ -8,14 +8,43 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.productivity.ProductivityApp
+import com.example.productivity.data.tasks.TaskRepository
+import com.example.productivity.ui.tasks.TaskChoice
+import com.example.productivity.ui.tasks.taskChoices
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class PomodoroViewModel(application: Application) : AndroidViewModel(application) {
+/** The timer's task field: typed text, or a task from the Task List ([taskId] set). */
+data class PomodoroTask(val title: String = "", val taskId: Long? = null)
+
+class PomodoroViewModel(
+    application: Application,
+    private val tasks: TaskRepository,
+) : AndroidViewModel(application) {
+
+    /** Used by the default ViewModel factory. */
+    constructor(application: Application) :
+        this(application, (application as ProductivityApp).container.taskRepository)
 
     var state by mutableStateOf(PomodoroState())
         private set
+
+    var task by mutableStateOf(PomodoroTask())
+        private set
+
+    /** Open tasks for the task field's picker. */
+    val taskChoices: StateFlow<List<TaskChoice>> =
+        combine(tasks.graph, tasks.today) { graph, today -> graph.taskChoices(today) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Keeps a linked task's title up to date. */
+    private var following: Job? = null
 
     private var ticker: Job? = null
 
@@ -76,6 +105,41 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         val app = getApplication<Application>()
         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
         RingtoneManager.getRingtone(app, uri)?.play()
+    }
+
+    /** Typing in the field makes it plain text again, no longer linked to a task. */
+    fun typeTask(text: String) {
+        following?.cancel()
+        task = PomodoroTask(text)
+    }
+
+    fun pickTask(choice: TaskChoice) = link(choice.id, choice.title)
+
+    /**
+     * From a ▶ in the Task List: links the task and, if the timer is idle, starts a focus
+     * session on it. A session already running or paused is left alone; only the task changes.
+     */
+    fun startOn(taskId: Long) {
+        link(taskId, title = if (task.taskId == taskId) task.title else "")
+        if (state.status == TimerStatus.Ready) {
+            selectMode(PomodoroMode.Focus)
+            start()
+        }
+    }
+
+    private fun link(taskId: Long, title: String) {
+        following?.cancel()
+        task = PomodoroTask(title, taskId)
+        following = viewModelScope.launch {
+            tasks.observeTask(taskId).collect { status ->
+                task = if (status == null) {
+                    // Deleted: keep the words, drop the link.
+                    task.copy(taskId = null).also { following?.cancel() }
+                } else {
+                    task.copy(title = status.task.title)
+                }
+            }
+        }
     }
 
     private fun now() = SystemClock.elapsedRealtime()

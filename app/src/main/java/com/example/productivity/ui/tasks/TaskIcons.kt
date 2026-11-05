@@ -33,6 +33,8 @@ object TaskIcons {
     )
     val Filter = strokeIcon("Filter", 2.2f, "M4 6h16M7 12h10M10 18h4")
     val More = strokeIcon("More", 3f, "M12 5h.01M12 12h.01M12 19h.01")
+    /** Filled, unlike the others. */
+    val Play = filledIcon("Play", "M7 4.5l13 7.5-13 7.5z")
     val Check = strokeIcon("Check", 2.4f, "M5 12.5l4.5 4.5L19 7.5")
 }
 
@@ -54,3 +56,15 @@ private fun strokeIcon(name: String, strokeWidth: Float, vararg paths: String): 
             )
         }
     }.build()
+
+private fun filledIcon(name: String, path: String): ImageVector =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).addPath(
+        pathData = addPathNodes(path),
+        fill = SolidColor(Color.Black), // replaced by Icon's tint
+    ).build()
