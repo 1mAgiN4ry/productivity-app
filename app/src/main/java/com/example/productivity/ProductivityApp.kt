@@ -6,6 +6,7 @@ import android.content.pm.ApplicationInfo
 import com.example.productivity.data.AppDatabase
 import com.example.productivity.data.tasks.SampleData
 import com.example.productivity.data.tasks.TaskRepository
+import com.example.productivity.ui.tasks.TaskUndo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,14 +16,19 @@ import kotlinx.coroutines.launch
 class AppContainer(context: Context) {
     val database: AppDatabase = AppDatabase.create(context)
     val taskRepository = TaskRepository(database)
+    val taskUndo = TaskUndo()
+
+    /**
+     * For writes that must finish even if the screen that started them closes (e.g. the last
+     * keystroke of a title edit as you tap Back). Screen-scoped coroutines would cancel them.
+     */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 }
 
 class ProductivityApp : Application() {
 
     lateinit var container: AppContainer
         private set
-
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -36,7 +42,7 @@ class ProductivityApp : Application() {
     private fun loadSampleDataOnce() {
         val prefs = getSharedPreferences("debug", MODE_PRIVATE)
         if (prefs.getBoolean(SAMPLE_DATA_LOADED, false)) return
-        appScope.launch {
+        container.appScope.launch {
             SampleData.load(container.taskRepository)
             prefs.edit().putBoolean(SAMPLE_DATA_LOADED, true).apply()
         }

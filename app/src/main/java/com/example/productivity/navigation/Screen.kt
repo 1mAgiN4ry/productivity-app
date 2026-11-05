@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.productivity.ui.theme.GruvBg0
 import com.example.productivity.ui.theme.PomodoroFocusRed
 
 sealed class Screen(
@@ -29,8 +30,9 @@ sealed class Screen(
         route = "tasks",
         title = "Task List",
         icon = Icons.Filled.Check,
-        lightColor = Color(0xFFE3F2FD), // Cool blue tint
-        darkColor = Color(0xFF1E2E3B),
+        // Always dark Gruvbox, as in the Task List design.
+        lightColor = GruvBg0,
+        darkColor = GruvBg0,
     )
 
     object HabitTracker : Screen(

@@ -9,11 +9,13 @@ import androidx.compose.ui.unit.sp
 import com.example.productivity.R
 
 val DmSans = FontFamily(
+    Font(R.font.dm_sans_regular, FontWeight.Normal),
     Font(R.font.dm_sans_medium, FontWeight.Medium),
     Font(R.font.dm_sans_bold, FontWeight.Bold),
 )
 
 val DmMono = FontFamily(
+    Font(R.font.dm_mono_regular, FontWeight.Normal),
     Font(R.font.dm_mono_medium, FontWeight.Medium),
 )
 

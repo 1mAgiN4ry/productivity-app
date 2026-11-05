@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -36,7 +37,11 @@ import com.example.productivity.ui.screens.HabitTrackerScreen
 import com.example.productivity.ui.screens.PomodoroViewModel
 import com.example.productivity.ui.screens.PomodoroScreen
 import com.example.productivity.ui.screens.SettingsScreen
-import com.example.productivity.ui.screens.TaskListScreen
+import com.example.productivity.ui.tasks.TaskRoutes
+import com.example.productivity.ui.tasks.taskGraph
+import com.example.productivity.ui.theme.GruvBg0
+import com.example.productivity.ui.theme.GruvFg0
+import com.example.productivity.ui.theme.GruvFg3
 import com.example.productivity.ui.theme.PomodoroInk
 import com.example.productivity.ui.theme.ProductivityAppTheme
 
@@ -56,10 +61,16 @@ class MainActivity : ComponentActivity() {
 fun MainAppScreen() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Pomodoro.route
+    val destination = navBackStackEntry?.destination
 
     val isDark = isSystemInDarkTheme()
-    val activeScreen = Screen.items.firstOrNull { it.route == currentRoute } ?: Screen.Pomodoro
+    // A tab can hold several screens (Task List: list, group, detail), so match on the hierarchy.
+    val activeScreen = Screen.items.firstOrNull { screen ->
+        destination?.hierarchy?.any { it.route == screen.route } == true
+    } ?: Screen.Pomodoro
+    val onTasks = activeScreen == Screen.TaskList
+    // Task detail is full-screen, as in the design.
+    val showNavbar = destination?.route != TaskRoutes.DETAIL
 
     // Activity-scoped so the timer keeps running across tab switches and rotation, and so
     // the navbar and system bars can follow the current Pomodoro mode.
@@ -78,9 +89,9 @@ fun MainAppScreen() {
         label = "NavbarColorAnimation"
     )
 
-    // The Pomodoro modes are saturated colours, so they need light status/nav bar icons.
+    // Pomodoro's saturated modes and the dark task screens need light status/nav bar icons.
     val view = LocalView.current
-    val lightSystemBars = !onPomodoro && !isDark
+    val lightSystemBars = !onPomodoro && !onTasks && !isDark
     if (!view.isInEditMode) {
         LaunchedEffect(lightSystemBars) {
             val window = (view.context as Activity).window
@@ -97,7 +108,7 @@ fun MainAppScreen() {
             .background(animatedColor),
         containerColor = animatedColor,
         bottomBar = {
-            NavigationBar(
+            if (showNavbar) NavigationBar(
                 containerColor = animatedColor,
                 contentColor = MaterialTheme.colorScheme.onSurface
             ) {
@@ -110,6 +121,15 @@ fun MainAppScreen() {
                         unselectedIconColor = PomodoroInk.copy(alpha = 0.7f),
                         unselectedTextColor = PomodoroInk.copy(alpha = 0.7f)
                     )
+                } else if (onTasks) {
+                    // Gruvbox, as in the Task List design.
+                    NavigationBarItemDefaults.colors(
+                        indicatorColor = GruvFg0,
+                        selectedIconColor = GruvBg0,
+                        selectedTextColor = GruvFg0,
+                        unselectedIconColor = GruvFg3,
+                        unselectedTextColor = GruvFg3
+                    )
                 } else {
                     NavigationBarItemDefaults.colors(
                         indicatorColor = MaterialTheme.colorScheme.primaryContainer,
@@ -120,7 +140,7 @@ fun MainAppScreen() {
                     )
                 }
                 Screen.items.forEach { screen ->
-                    val isSelected = currentRoute == screen.route
+                    val isSelected = activeScreen == screen
                     NavigationBarItem(
                         icon = {
                             Icon(
@@ -131,7 +151,12 @@ fun MainAppScreen() {
                         label = { Text(screen.title) },
                         selected = isSelected,
                         onClick = {
-                            if (currentRoute != screen.route) {
+                            if (isSelected) {
+                                // Re-tapping the Task List tab returns to its main list.
+                                if (screen == Screen.TaskList) {
+                                    navController.popBackStack(TaskRoutes.ALL, inclusive = false)
+                                }
+                            } else {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
@@ -164,9 +189,7 @@ fun MainAppScreen() {
                     onReset = pomodoro::reset
                 )
             }
-            composable(Screen.TaskList.route) {
-                TaskListScreen()
-            }
+            taskGraph(navController)
             composable(Screen.HabitTracker.route) {
                 HabitTrackerScreen()
             }
